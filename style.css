@@ -1,26 +1,177 @@
-﻿@charset "utf-8";
-body { 
-font-family : Verdana, Arial, Helvetica, Sans-serif;
-line-height: 1.2em;
-} 
-h1, h2 {text-align: center}
-dt { 
-font-weight : bold; 
-float : left; 
-width: 10%;
-clear: left
-} 
-dd { 
-margin : 0 0 0.4em 0; 
-float : left;
-width: 90%;
-display: block;
-} 
-p { clear : both; 
-} 
-a { text-decoration : underline; 
-} 
-:active { 
-text-decoration : none; 
+﻿const dropZone = document.getElementById("dropZone");
+const fileInput = document.getElementById("fileInput");
+const processBtn = document.getElementById("processBtn");
+const loader = document.getElementById("loader");
+const results = document.getElementById("results");
+
+const resizePercent = document.getElementById("resizePercent");
+const qualityInput = document.getElementById("qualityInput");
+const formatSelect = document.getElementById("formatSelect");
+const estimatedSizeInput = document.getElementById("estimatedSize");
+const progressTone = document.getElementById("progressTone");
+
+// Helper function to play a tone beep
+function playTone() {
+  if (progressTone) {
+    progressTone.currentTime = 0; // Rewind to start
+    progressTone.play().catch(e => console.error("Audio playback failed:", e));
+  }
 }
-a:focus, a:hover {outline: solid}
+
+// Function to calculate and display estimated output size in MB
+function calculateEstimatedSize() {
+  const files = fileInput.files;
+  if (!files.length) {
+    estimatedSizeInput.value = "N/A";
+    return;
+  }
+
+  const percent = parseFloat(resizePercent.value) / 100;
+  const quality = parseFloat(qualityInput.value);
+  let totalEstimatedSizeMB = 0;
+
+  for (const file of files) {
+    // Basic estimation: size reduction proportional to (percent^2) and quality.
+    // This is a rough estimate and will vary significantly based on format and content.
+    const reductionFactor = Math.pow(percent, 2) * quality * 0.8; // Added 0.8 as a heuristic factor
+    const estimatedSize = file.size * reductionFactor;
+    totalEstimatedSizeMB += estimatedSize / (1024 * 1024);
+  }
+
+  estimatedSizeInput.value = totalEstimatedSizeMB.toFixed(2) + " MB (Est.)";
+}
+
+// Attach event listeners for estimation updates
+resizePercent.addEventListener("input", calculateEstimatedSize);
+qualityInput.addEventListener("input", calculateEstimatedSize);
+fileInput.addEventListener("change", calculateEstimatedSize);
+
+
+// Theme toggle
+document.getElementById("toggleTheme").onclick = () => {
+  document.documentElement.classList.toggle("dark");
+};
+
+// Click drop zone
+dropZone.addEventListener("click", () => fileInput.click());
+
+// Drag & Drop
+dropZone.addEventListener("dragover", e => {
+  e.preventDefault();
+  dropZone.classList.add("bg-blue-200/30");
+});
+
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("bg-blue-200/30"));
+
+dropZone.addEventListener("drop", e => {
+  e.preventDefault();
+  dropZone.classList.remove("bg-blue-200/30");
+  const dt = e.dataTransfer;
+  if (dt.files.length) {
+    const fileList = new DataTransfer();
+    Array.from(dt.files).forEach(file => fileList.items.add(file));
+    fileInput.files = fileList.files;
+    calculateEstimatedSize(); // Update estimate after drop
+  }
+});
+
+// PROCESS
+processBtn.onclick = async () => {
+  const files = fileInput.files;
+  if (!files.length) {
+    results.innerHTML = `<div class="p-4 border rounded-xl dark:border-gray-700 text-red-500">Please select at least one image.</div>`;
+    return;
+  }
+
+  loader.classList.remove("hidden");
+  results.innerHTML = "";
+  processBtn.disabled = true; // Disable button during processing
+  
+  const zip = new JSZip();
+  const picaResizer = window.pica();
+  const multipleFiles = files.length > 1;
+
+  let blobs = [];
+  let errorCount = 0;
+
+  for (const file of files) {
+    // 1. File Type Validation
+    if (!file.type.startsWith('image/')) {
+        results.innerHTML += `
+          <div class="p-4 border rounded-xl dark:border-gray-700 text-red-500">
+            <div>❌ <strong>${file.name}</strong></div>
+            <div>Error: File is not a supported image format.</div>
+          </div>
+        `;
+        errorCount++;
+        continue; // Skip this file
+    }
+    
+    // Play tone for each file processing start
+    playTone();
+
+    const arrayBuffer = await file.arrayBuffer();
+    const orientation = EXIF.readFromBinaryFile(arrayBuffer)?.Orientation;
+
+    const img = await createImageBitmap(file);
+
+    const percent = parseFloat(resizePercent.value) / 100;
+    const newWidth = Math.round(img.width * percent);
+    const newHeight = Math.round(img.height * percent);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = newWidth;
+    canvas.height = newHeight;
+
+    await picaResizer.resize(img, canvas);
+
+    // EXIF Fix (Rotation)
+    if (orientation && orientation !== 1) {
+      const tempCanvas = document.createElement("canvas");
+      const ctx = tempCanvas.getContext("2d");
+      // Check if width/height need swapping based on orientation (simplified for 90deg rotation example)
+      tempCanvas.width = canvas.height; 
+      tempCanvas.height = canvas.width;
+      
+      ctx.translate(tempCanvas.width / 2, tempCanvas.height / 2);
+      ctx.rotate(90 * Math.PI / 180);
+      ctx.drawImage(canvas, -canvas.width / 2, -canvas.height / 2);
+      
+      // Update the original canvas with the rotated content
+      canvas.width = tempCanvas.width;
+      canvas.height = tempCanvas.height;
+      canvas.getContext("2d").drawImage(tempCanvas, 0, 0);
+    }
+
+    const originalSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+    const blob = await new Promise(res => canvas.toBlob(res, formatSelect.value, parseFloat(qualityInput.value)));
+    blobs.push({ name: file.name, blob, newWidth, newHeight, originalSizeMB });
+
+    const compressedSizeKB = (blob.size / 1024).toFixed(1);
+
+    results.innerHTML += `
+      <div class="p-4 border rounded-xl dark:border-gray-700">
+        <div>✅ <strong>${file.name} (Success)</strong></div>
+        <div>Original: ${originalSizeMB} MB | ${img.width} x ${img.height}px</div>
+        <div>New Size: ${compressedSizeKB} KB | ${newWidth} x ${newHeight}px</div>
+      </div>
+    `;
+  }
+
+  // DOWNLOAD
+  if (blobs.length > 0) {
+    if (multipleFiles || blobs.length > 1) {
+      blobs.forEach(b => zip.file(b.name, b.blob));
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      saveAs(zipBlob, "resize-pro.zip");
+    } else {
+      saveAs(blobs[0].blob, blobs[0].name);
+    }
+  } else if (errorCount > 0) {
+      // Show general error message if only errors occurred
+      results.innerHTML += `<div class="p-4 border rounded-xl dark:border-gray-700 text-red-500 mt-4">No images were successfully processed. Please check file types.</div>`;
+  }
+
+  loader.classList.add("hidden");
+  processBtn.disabled = false; // Re-enable button
+};
