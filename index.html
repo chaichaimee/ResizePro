@@ -1,0 +1,78 @@
+﻿<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RESIZE PHOTO</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="text-gray-900 dark:text-gray-100 relative">
+
+  <button id="toggleTheme" class="theme-btn fixed top-4 right-4 z-50">Theme</button>
+
+  <header class="text-center mt-10 mb-6 px-3">
+    <h1 class="text-5xl md:text-6xl font-black">RESIZE PHOTO</h1>
+    <p class="text-xl mt-2 font-medium opacity-80">Reduce image size without losing quality</p>
+  </header>
+
+  <main class="container mx-auto px-4">
+
+    <div id="dropZone" class="drop-zone mb-6">
+      <p class="text-lg">Drag & Drop images here</p>
+      <span class="opacity-60">(or click to select files)</span>
+      <input id="fileInput" type="file" accept="image/*" multiple class="hidden">
+    </div>
+
+    <div class="settings grid grid-cols-2 gap-4 mb-6">
+
+      <div>
+        <label>Resize (%)</label>
+        <input id="resizePercent" type="number" class="input-box" value="100" min="1" max="100">
+      </div>
+
+      <div>
+        <label>Quality</label>
+        <input id="qualityInput" type="number" class="input-box" value="0.9" min="0.1" max="1" step="0.1">
+      </div>
+
+      <div class="col-span-2">
+        <label>Format</label>
+        <select id="formatSelect" class="input-box w-full">
+          <option value="image/jpeg">JPEG (Lossy)</option>
+          <option value="image/webp">WEBP (Lossy)</option>
+          <option value="image/png">PNG (Lossless)</option>
+          <option value="image/tiff">TIFF</option>
+          <option value="image/bmp">BMP</option>
+          <option value="image/gif">GIF</option>
+        </select>
+      </div>
+      
+      <div class="col-span-2">
+        <label>Estimated Output Size (MB)</label>
+        <input id="estimatedSize" type="text" class="input-box" value="N/A" disabled>
+      </div>
+    </div>
+
+    <button id="processBtn" class="process-btn w-full">Resize & Compress</button>
+
+    <div id="loader" class="hidden loader mt-4">Processing...</div>
+
+    <div id="results" class="results mt-6"></div>
+    
+    <audio id="progressTone" src="data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPUVVCMCAwLjUuNAAAAA5BTUUzLjkyLjQAMAAAAEluZ3JhbSAtIENsYXBzIChUZWNoIEhvdXNlICBTdGlsZSkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEgAAA==" preload="auto"></audio>
+
+  </main>
+
+  <script src="libs/exif.min.js"></script>
+  <script src="libs/pica.min.js"></script>
+  <script src="libs/browser-image-compression.js"></script>
+  <script src="libs/jszip.min.js"></script>
+  <script src="libs/FileSaver.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
